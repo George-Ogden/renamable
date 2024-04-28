@@ -5,7 +5,15 @@ from interface import Add
 
 @dataclass
 class Currency(Add):
-    value: int
+    amount: int
+
+    @property
+    def value(self) -> int:
+        return self.amount
+
+    @value.setter
+    def value(self, value: int):
+        self.amount = value
 
 
 def test_currency():
