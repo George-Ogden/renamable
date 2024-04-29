@@ -4,16 +4,22 @@ from interface import Add
 
 
 @dataclass
-class Currency(Add):
+class Box(Add):
+    value: int
+
+
+@dataclass
+class Currency(Add["amount"]):
     amount: int
 
-    @property
-    def value(self) -> int:
-        return self.amount
 
-    @value.setter
-    def value(self, value: int):
-        self.amount = value
+def test_box():
+    a = Box(10)
+    b = Box(20)
+    c = a + b
+    assert c == Box(30)
+    assert c.value == 30
+    assert c.Add.value == 30
 
 
 def test_currency():
@@ -21,3 +27,4 @@ def test_currency():
     b = Currency(20)
     c = a + b
     assert c == Currency(30)
+    assert c.amount == 30
