@@ -17,11 +17,13 @@ class AddInterface:
 def AddMeta(cls_name, cls_parents, cls_attrs):
     @property
     def base_property(base_self) -> Add:
-        @property
-        def value_property(self) -> int:
+        def value_getter(self) -> int:
             return getattr(base_self, base_self._alternative_name)
 
-        return type(cls_name, (), {"value": value_property})()
+        def value_setter(self, value) -> int:
+            return setattr(base_self, base_self._alternative_name, value)
+
+        return type(cls_name, (), {"value": property(value_getter, value_setter)})()
 
     return type(cls_name, cls_parents + (AddInterface,), cls_attrs | {"Add": base_property})
 
