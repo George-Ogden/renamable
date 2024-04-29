@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Self, Type
 
 
-class Interface:
+class AddInterface:
     _alternative_name: str = "value"
 
     def __class_getitem__(cls, alternative_name: str) -> Type[Self]:
@@ -14,7 +14,7 @@ class Interface:
         )
 
 
-def AddInterface(cls_name, cls_parents, cls_attrs):
+def AddMeta(cls_name, cls_parents, cls_attrs):
     @property
     def base_property(base_self) -> Add:
         @property
@@ -23,10 +23,10 @@ def AddInterface(cls_name, cls_parents, cls_attrs):
 
         return type(cls_name, (), {"value": value_property})()
 
-    return type(cls_name, cls_parents + (Interface,), cls_attrs | {"Add": base_property})
+    return type(cls_name, cls_parents + (AddInterface,), cls_attrs | {"Add": base_property})
 
 
-class Add(metaclass=AddInterface):
+class Add(metaclass=AddMeta):
     value: int
 
     def __add__(self, other: Add) -> Self:
