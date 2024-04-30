@@ -4,7 +4,7 @@ from interface import Add
 
 
 @dataclass
-class Box(Add):
+class Box(Add["value"]):
     value: int
 
 
