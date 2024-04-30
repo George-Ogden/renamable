@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Self, Tuple, Type, Union
 
 
-def InterfaceMeta(cls_name, cls_parents, cls_attrs):
+def ImplementationMeta(cls_name, cls_parents, cls_attrs):
     # * Make any annotations or defined variables public.
     # Assume all methods have annotations.
     public_attributes = (
@@ -67,7 +67,7 @@ def InterfaceMeta(cls_name, cls_parents, cls_attrs):
     return type(cls_name, cls_parents, cls_attrs)
 
 
-class Add(metaclass=InterfaceMeta):
+class Add(metaclass=ImplementationMeta):
     value: int
 
     def __add__(self, other: Add) -> Self:
