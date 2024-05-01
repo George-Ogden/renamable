@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from interface import Add
+from interface import Add, Boxed, Option
 
 
 @dataclass
@@ -11,6 +11,14 @@ class Box(Add["value"]):
 @dataclass
 class Currency(Add["amount"]):
     amount: int
+
+
+@dataclass
+class Integer(Boxed[int]["value"]):
+    value: int
+
+
+OptInt = Option[int]
 
 
 def test_box_add():
@@ -37,8 +45,64 @@ def test_box_overwrite():
     assert box.value == 30
 
 
-def test_currency():
+def test_currency_overwrite():
     currency = Currency(10)
     currency.Add.value = 40
     assert currency.Add.value == 40
     assert currency.amount == 40
+
+
+def test_integer_map():
+    x = Integer(10)
+    y = x.map(lambda x: x * 2)
+    assert y == Integer(20)
+    assert y.value == 20
+
+
+def test_optint_present_map():
+    x = OptInt(10)
+    y = x.map(lambda x: x * 2)
+    assert y == OptInt(20)
+    assert y.optional_value == 20
+
+
+def test_optint_absent_map():
+    x = OptInt()
+    y = x.map(lambda x: x * 2)
+    assert y == OptInt()
+    assert y.optional_value is None
+
+
+def test_integer_overwrite():
+    x = Integer(10)
+    x.Boxed.value = 40
+    assert x.Boxed.value == 40
+    assert x.value == 40
+
+
+def test_optint_overwrite():
+    x = OptInt(10)
+    x.Boxed.value = 40
+    assert x.Boxed.value == 40
+    assert x.optional_value == 40
+
+
+def test_integer_indirect_map():
+    x = Integer(10)
+    y = x.Functor.map(lambda x: x * 2)
+    assert y == Integer(20)
+    assert y.value == 20
+
+
+def test_optint_present_indirect_map():
+    x = OptInt(10)
+    y = x.Functor.map(lambda x: x * 2)
+    assert y == OptInt(20)
+    assert y.optional_value == 20
+
+
+def test_optint_absent_indirect_map():
+    x = OptInt()
+    y = x.Functor.map(lambda x: x * 2)
+    assert y == OptInt()
+    assert y.optional_value is None
