@@ -1,6 +1,19 @@
 from __future__ import annotations
 
-from typing import Dict, Generic, Self, Tuple, Type, Union, _generic_class_getitem
+import abc
+import itertools
+from dataclasses import dataclass
+from typing import (
+    Callable,
+    Dict,
+    Generic,
+    Optional,
+    Self,
+    Tuple,
+    Type,
+    Union,
+    _generic_class_getitem,
+)
 
 
 def ImplementationMeta(cls_name, cls_parents, cls_attrs):
@@ -81,3 +94,26 @@ class Add(metaclass=ImplementationMeta):
 
     def __add__(self, other: Add) -> Self:
         return type(self)(self.Add.value + other.Add.value)
+
+
+class Functor[T](metaclass=ImplementationMeta):
+    @abc.abstractmethod
+    def map(self, f: Callable[[T], T]) -> Self: ...
+
+
+class Boxed[T](Functor[T][()], metaclass=ImplementationMeta):
+    value: T
+
+    def map(self, f: Callable[[T], T]) -> Self:
+        return type(self)(f(self.Boxed.value))
+
+
+@dataclass
+class Option[T](Boxed[T]["optional_value"]):
+    optional_value: Optional[T] = None
+
+    def map(self, f: Callable[[T], T]) -> Self:
+        if self.optional_value is None:
+            return type(self)(None)
+        else:
+            return Boxed.map(self, f)
