@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import itertools
 from dataclasses import dataclass
 from typing import (
     Callable,
@@ -55,35 +54,39 @@ def ImplementationMeta(cls_name, cls_parents, cls_attrs):
 
         return type(cls_name, (), public_properties)()
 
-    @classmethod
-    def class_getitem(cls, alternative_names: Union[str, Tuple[str, ...]]) -> Type[Self]:
-        if not isinstance(alternative_names, tuple):
-            alternative_names = (alternative_names,)
-        if len(alternative_names) != len(public_attributes):
-            raise TypeError("Tried to initialise ...")
-        alternative_names = {
-            attribute: name for attribute, name in zip(public_attributes, alternative_names)
-        }
-        attributes = dict(cls.__dict__)
-        attributes.pop("__class_getitem__")
-        attributes["_alternative_names"] = alternative_names
-        return type(
-            f"{cls.__name__}[{','.join([str(name) for name in alternative_names.values()])}]",
-            cls.__bases__,
-            attributes,
-        )
-
-    cls_attrs["__class_getitem__"] = class_getitem
     cls_attrs[cls_name] = base_property
-    if Generic in cls_parents:
-        copied_cls_attrs = dict(cls_attrs)
+    if len(public_attributes) > 0:
 
-        def updated_class_getitem(cls, *args, **kwargs):
-            type_alias = _generic_class_getitem(cls, *args, **kwargs)
-            cls_attrs["__class_getitem__"] = class_getitem
-            return type(type_alias.__name__, cls_parents, copied_cls_attrs)
+        @classmethod
+        def class_getitem(cls, alternative_names: Union[str, Tuple[str, ...]]) -> Type[Self]:
+            if not isinstance(alternative_names, tuple):
+                alternative_names = (alternative_names,)
+            if len(alternative_names) != len(public_attributes):
+                raise TypeError("Tried to initialise ...")
+            alternative_names = {
+                attribute: name for attribute, name in zip(public_attributes, alternative_names)
+            }
+            attributes = dict(cls.__dict__)
+            attributes.pop("__class_getitem__")
+            attributes["_alternative_names"] = alternative_names
+            return type(
+                f"{cls.__name__}[{','.join([str(name) for name in alternative_names.values()])}]",
+                cls.__bases__,
+                attributes,
+            )
 
-        cls_attrs["__class_getitem__"] = updated_class_getitem
+        cls_attrs["__class_getitem__"] = class_getitem
+        if Generic in cls_parents:
+            copied_cls_attrs = dict(cls_attrs)
+
+            def updated_class_getitem(cls, *args, **kwargs):
+                type_alias = _generic_class_getitem(cls, *args, **kwargs)
+                cls_attrs["__class_getitem__"] = class_getitem
+                return type(type_alias.__name__, cls_parents, copied_cls_attrs)
+
+            cls_attrs["__class_getitem__"] = updated_class_getitem
+    else:
+        cls_attrs["_alternative_names"] = {}
 
     cls = type(cls_name, cls_parents, cls_attrs)
     return cls
@@ -101,7 +104,7 @@ class Functor[T](metaclass=ImplementationMeta):
     def map(self, f: Callable[[T], T]) -> Self: ...
 
 
-class Boxed[T](Functor[T][()], metaclass=ImplementationMeta):
+class Boxed[T](Functor[T], metaclass=ImplementationMeta):
     value: T
 
     def map(self, f: Callable[[T], T]) -> Self:
