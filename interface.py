@@ -72,6 +72,7 @@ class InterfaceMeta(type):
         metaclass_bases: Tuple[InterfaceMeta] = tuple(base for base in bases if type(base) == mcls)
         cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace, **kwargs)
         if len(metaclass_bases) > 0:
+            # TODO: make these readonly and immutable.
             for base in metaclass_bases:
                 if base.__is_interface:
                     base.register(cls)
@@ -91,3 +92,8 @@ class InterfaceMeta(type):
 
     def list_implementations(self) -> List[Type[Self]]:
         return list(self.__registry.values())
+
+    def __getattribute__(self, name: str) -> Any:
+        if not name.startswith("_") and name in self.__registry:
+            return self.__registry[name]
+        return super().__getattribute__(name)
