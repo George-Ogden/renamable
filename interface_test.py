@@ -77,3 +77,18 @@ def test_specification_methods():
     assert "method2" in spec.methods
     assert str(spec.methods["method1"]) == "(self, x: int, y: str)"
     assert str(spec.methods["method2"]) == "(self)"
+
+
+def test_registration():
+    class TestInterface(metaclass=InterfaceMeta):
+        x: int
+
+    class TestImplementation1(TestInterface):
+        x = 1
+
+    class TestImplementation2(TestInterface):
+        x: int = 2
+
+    implementations = TestInterface.list_implementations()
+    assert len(implementations) == 2
+    assert set(implementations) == set((TestImplementation1, TestImplementation2))
