@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple, Type
+from typing import Any, Dict, List, Self, Tuple, Type
 
 
 @dataclass(repr=False)
@@ -58,6 +58,8 @@ class Specification:
 
 class InterfaceMeta(type):
     __specification: Specification
+    __registry: Dict[str, Type[Self]]
+    __is_interface: bool
 
     def __new__(
         mcls: Type[type],
@@ -67,10 +69,25 @@ class InterfaceMeta(type):
         /,
         **kwargs: Dict[str, Any],
     ) -> InterfaceMeta:
+        metaclass_bases: Tuple[InterfaceMeta] = tuple(base for base in bases if type(base) == mcls)
         cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace, **kwargs)
-        specification = Specification.from_cls(cls)
-        cls.__specification = specification
+        if len(metaclass_bases) > 0:
+            for base in metaclass_bases:
+                if base.__is_interface:
+                    base.register(cls)
+            cls.__is_interface = False
+        else:
+            specification = Specification.from_cls(cls)
+            cls.__specification = specification
+            cls.__registry = {}
+            cls.__is_interface = True
         return cls
 
     def __str__(cls) -> str:
         return str(cls.__specification)
+
+    def register(self, cls: Type[Self]):
+        self.__registry[cls.__name__] = cls
+
+    def list_implementations(self) -> List[Type[Self]]:
+        return list(self.__registry.values())
