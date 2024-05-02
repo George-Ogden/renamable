@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Dict, List, Self, Tuple, Type
+from typing import Any, Dict, List, Optional, Self, Tuple, Type
 
 
 @dataclass(repr=False)
@@ -59,7 +59,7 @@ class Specification:
 class InterfaceMeta(type):
     __specification: Specification
     __registry: Dict[str, Type[Self]]
-    __is_interface: bool
+    __interface: Optional[InterfaceMeta] = None
 
     def __new__(
         mcls: Type[type],
@@ -67,30 +67,55 @@ class InterfaceMeta(type):
         bases: Tuple[Type[Any], ...],
         namespace: Dict[str, Any],
         /,
-        **kwargs: Dict[str, Any],
+        **kwargs: Any,
     ) -> InterfaceMeta:
-        metaclass_bases: Tuple[InterfaceMeta] = tuple(base for base in bases if type(base) == mcls)
         cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace, **kwargs)
-        if len(metaclass_bases) > 0:
-            # TODO: make these readonly and immutable.
-            for base in metaclass_bases:
-                if base.__is_interface:
-                    base.register(cls)
-            cls.__is_interface = False
-        else:
+        if cls.__interface == None:
             specification = Specification.from_cls(cls)
             cls.__specification = specification
             cls.__registry = {}
-            cls.__is_interface = True
+            cls.__interface = cls
+        else:
+            cls.__interface.register(cls)
         return cls
 
     def __str__(cls) -> str:
         return str(cls.__specification)
 
-    def register(self, cls: Type[Self]):
+    def register(self, cls: Self):
         self.__registry[cls.__name__] = cls
+        self._add_property(cls)
 
-    def list_implementations(self) -> List[Type[Self]]:
+    def _add_property(self, cls: InterfaceMeta):
+        """Add a property that acts as an alias via the interface."""
+
+        @property
+        def interface_property(root):
+            public_properties: Dict[str, property] = {}
+            for name in cls.__specification.variables:
+                public_properties[name] = self._make_property(root, name, settable=True)
+
+            for name in cls.__specification.methods:
+                public_properties[name] = self._make_property(root, name, settable=False)
+            return type(cls.__interface.__name__, (), public_properties)()
+
+        setattr(cls, cls.__interface.__name__, interface_property)
+
+    def _make_property(self, root, name: str, settable: bool = True) -> property:
+        """Make a property to get attributes from the root."""
+
+        def getter(self) -> Any:
+            return getattr(root, name)
+
+        def setter(self, value: Any):
+            return setattr(root, name, value)
+
+        if settable:
+            return property(getter, setter)
+        else:
+            return property(getter)
+
+    def list_implementations(self) -> List[Self]:
         return list(self.__registry.values())
 
     def __getattribute__(self, name: str) -> Any:
