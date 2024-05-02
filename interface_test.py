@@ -1,108 +1,79 @@
-from dataclasses import dataclass
+from typing import Callable, Optional
 
-from interface import Add, Boxed, Option
+import pytest
 
-
-@dataclass
-class Box(Add["value"]):
-    value: int
+from interface import InterfaceMeta, Specification
 
 
-@dataclass
-class Currency(Add["amount"]):
-    amount: int
+def test_empty_specification():
+    with pytest.raises(TypeError):
+
+        class EmptyInterface(metaclass=InterfaceMeta): ...
 
 
-@dataclass
-class Integer(Boxed[int]["value"]):
-    value: int
+def test_specification_with_definition():
+    with pytest.raises(TypeError):
+
+        class InterfaceWithError(metaclass=InterfaceMeta):
+            a: int = 5
 
 
-OptInt = Option[int]
+def test_specification_without_declaration():
+    with pytest.raises(ValueError):
+
+        class InterfaceWithError(metaclass=InterfaceMeta):
+            a = 5
 
 
-def test_box_add():
-    a = Box(10)
-    b = Box(20)
-    c = a + b
-    assert c == Box(30)
-    assert c.value == 30
-    assert c.Add.value == 30
+def test_specification_with_duplicate():
+    with pytest.raises(TypeError):
+
+        class DuplicateInterface(metaclass=InterfaceMeta):
+            foo: Callable
+
+            def foo(self): ...
 
 
-def test_currency_add():
-    a = Currency(10)
-    b = Currency(20)
-    c = a + b
-    assert c == Currency(30)
-    assert c.amount == 30
+def test_specification_repr():
+    class TestInterface(metaclass=InterfaceMeta):
+        a: int
+        b: str
+
+        def method(self, x: int, y: str):
+            pass
+
+    spec = Specification.from_cls(TestInterface)
+    assert (
+        repr(spec) == "TestInterface: Interface\n- a: int\n- b: str\n- method(self, x: int, y: str)"
+    )
 
 
-def test_box_overwrite():
-    box = Box(10)
-    box.Add.value = 30
-    assert box.Add.value == 30
-    assert box.value == 30
+def test_specification_variables():
+    class TestInterface:
+        attribute1: int
+        attribute2: Optional[str]
+
+    spec = Specification.from_cls(TestInterface)
+    assert len(spec.variables) == 2
+    assert len(spec.methods) == 0
+    assert "attribute1" in spec.variables
+    assert "attribute2" in spec.variables
+    assert spec.variables["attribute1"] == int
+    assert spec.variables["attribute2"] == Optional[str]
 
 
-def test_currency_overwrite():
-    currency = Currency(10)
-    currency.Add.value = 40
-    assert currency.Add.value == 40
-    assert currency.amount == 40
+def test_specification_methods():
+    class TestInterface:
+        def method1(self, x: int, y: str):
+            pass
 
+        def method2(self):
+            pass
 
-def test_integer_map():
-    x = Integer(10)
-    y = x.map(lambda x: x * 2)
-    assert y == Integer(20)
-    assert y.value == 20
-
-
-def test_optint_present_map():
-    x = OptInt(10)
-    y = x.map(lambda x: x * 2)
-    assert y == OptInt(20)
-    assert y.optional_value == 20
-
-
-def test_optint_absent_map():
-    x = OptInt()
-    y = x.map(lambda x: x * 2)
-    assert y == OptInt()
-    assert y.optional_value is None
-
-
-def test_integer_overwrite():
-    x = Integer(10)
-    x.Boxed.value = 40
-    assert x.Boxed.value == 40
-    assert x.value == 40
-
-
-def test_optint_overwrite():
-    x = OptInt(10)
-    x.Boxed.value = 40
-    assert x.Boxed.value == 40
-    assert x.optional_value == 40
-
-
-def test_integer_indirect_map():
-    x = Integer(10)
-    y = x.Functor.map(lambda x: x * 2)
-    assert y == Integer(20)
-    assert y.value == 20
-
-
-def test_optint_present_indirect_map():
-    x = OptInt(10)
-    y = x.Functor.map(lambda x: x * 2)
-    assert y == OptInt(20)
-    assert y.optional_value == 20
-
-
-def test_optint_absent_indirect_map():
-    x = OptInt()
-    y = x.Functor.map(lambda x: x * 2)
-    assert y == OptInt()
-    assert y.optional_value is None
+    spec = Specification.from_cls(TestInterface)
+    assert len(spec.variables) == 0
+    assert len(spec.methods) == 2
+    assert "method1" in spec.methods
+    assert "method2" in spec.methods
+    assert str(spec.methods["method1"]) == "(self, x: int, y: str)"
+    assert str(spec.methods["method2"]) == "(self)"
