@@ -1,122 +1,76 @@
 from __future__ import annotations
 
-import abc
+import inspect
 from dataclasses import dataclass
-from typing import (
-    Callable,
-    Dict,
-    Generic,
-    Optional,
-    Self,
-    Tuple,
-    Type,
-    Union,
-    _generic_class_getitem,
-)
+from typing import Any, Dict, Self, Tuple, Type
 
 
-def ImplementationMeta(cls_name, cls_parents, cls_attrs):
-    # * Make any annotations or defined variables public.
-    # Assume all methods have annotations.
-    public_attributes = [
-        attribute
-        for attribute in cls_attrs.get("__annotations__", {}).keys()
-        if not attribute.startswith("_")
-    ]
+@dataclass(repr=False)
+class Specification:
+    name: str
+    variables: Dict[str, Type[Any]]
+    methods: Dict[str, inspect.Signature]
 
-    public_methods = list(
-        method
-        for method in cls_attrs.keys()
-        if not method.startswith("_") and not method in public_attributes
-    )
+    def __repr__(self) -> str:
+        heading = f"{self.name}: Interface"
+        variables_body = "\n".join(
+            f"- {name}: {annotation.__name__}" for name, annotation in self.variables.items()
+        )
+        if variables_body != "":
+            variables_body = "\n" + variables_body
+        methods_body = "\n".join(
+            f"- {name}{(signature)}" for name, signature in self.methods.items()
+        )
+        if methods_body != "":
+            methods_body = "\n" + methods_body
+        return f"{heading}{variables_body}{methods_body}"
 
-    # Define base property.
-    @property
-    def base_property(base_self) -> Add:
-        # Storage for all public properties.
-        public_properties: Dict[str, property] = {}
-        for attribute in public_attributes:
+    @classmethod
+    def from_cls(scls, cls: Type[Any]) -> Specification:
+        declarations = {
+            name: declaration
+            for name, declaration in inspect.get_annotations(cls).items()
+            if not name.startswith("_")
+        }
+        definitions = {
+            name: definition for name, definition in vars(cls).items() if not name.startswith("_")
+        }
 
-            def getter(self) -> int:
-                return getattr(base_self, base_self._alternative_names[attribute])
+        if len(declarations) + len(definitions) == 0:
+            raise TypeError(f"`{cls.__name__}` defines an empty interface.")
 
-            def setter(self, value) -> int:
-                return setattr(base_self, base_self._alternative_names[attribute], value)
+        for name in definitions:
+            if name in declarations:
+                raise TypeError(f"`{name}` has been assigned a value or is declare twice.")
+            if not callable(definitions[name]):
+                raise ValueError(
+                    f"`{name}` detected in {cls.__name__} definition is not a function."
+                )
 
-            public_properties[attribute] = property(getter, setter)
-
-        for method in public_methods:
-
-            def getter(self) -> int:
-                return getattr(base_self, method)
-
-            public_properties[method] = property(getter)
-
-        return type(cls_name, (), public_properties)()
-
-    cls_attrs[cls_name] = base_property
-    if len(public_attributes) > 0:
-
-        @classmethod
-        def class_getitem(cls, alternative_names: Union[str, Tuple[str, ...]]) -> Type[Self]:
-            if not isinstance(alternative_names, tuple):
-                alternative_names = (alternative_names,)
-            if len(alternative_names) != len(public_attributes):
-                raise TypeError("Tried to initialise ...")
-            alternative_names = {
-                attribute: name for attribute, name in zip(public_attributes, alternative_names)
-            }
-            attributes = dict(cls.__dict__)
-            attributes.pop("__class_getitem__")
-            attributes["_alternative_names"] = alternative_names
-            return type(
-                f"{cls.__name__}[{','.join([str(name) for name in alternative_names.values()])}]",
-                cls.__bases__,
-                attributes,
-            )
-
-        cls_attrs["__class_getitem__"] = class_getitem
-        if Generic in cls_parents:
-            copied_cls_attrs = dict(cls_attrs)
-
-            def updated_class_getitem(cls, *args, **kwargs):
-                type_alias = _generic_class_getitem(cls, *args, **kwargs)
-                cls_attrs["__class_getitem__"] = class_getitem
-                return type(type_alias.__name__, cls_parents, copied_cls_attrs)
-
-            cls_attrs["__class_getitem__"] = updated_class_getitem
-    else:
-        cls_attrs["_alternative_names"] = {}
-
-    cls = type(cls_name, cls_parents, cls_attrs)
-    return cls
+        return Specification(
+            name=cls.__name__,
+            variables=declarations,
+            methods={
+                name: inspect.signature(definition) for name, definition in definitions.items()
+            },
+        )
 
 
-class Add(metaclass=ImplementationMeta):
-    value: int
+class InterfaceMeta(type):
+    __specification: Specification
 
-    def __add__(self, other: Add) -> Self:
-        return type(self)(self.Add.value + other.Add.value)
+    def __new__(
+        mcls: Type[Self],
+        name: str,
+        bases: Tuple[Type[Any], ...],
+        namespace: Dict[str, Any],
+        /,
+        **kwargs: Dict[str, Any],
+    ) -> Self:
+        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+        specification = Specification.from_cls(cls)
+        cls.__specification = specification
+        return cls
 
-
-class Functor[T](metaclass=ImplementationMeta):
-    @abc.abstractmethod
-    def map(self, f: Callable[[T], T]) -> Self: ...
-
-
-class Boxed[T](Functor[T], metaclass=ImplementationMeta):
-    value: T
-
-    def map(self, f: Callable[[T], T]) -> Self:
-        return type(self)(f(self.Boxed.value))
-
-
-@dataclass
-class Option[T](Boxed[T]["optional_value"]):
-    optional_value: Optional[T] = None
-
-    def map(self, f: Callable[[T], T]) -> Self:
-        if self.optional_value is None:
-            return type(self)(None)
-        else:
-            return Boxed.map(self, f)
+    def __repr__(cls) -> str:
+        return repr(cls.__specification)
