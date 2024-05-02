@@ -44,7 +44,7 @@ def test_specification_repr():
 
     spec = Specification.from_cls(TestInterface)
     assert (
-        repr(spec) == "TestInterface: Interface\n- a: int\n- b: str\n- method(self, x: int, y: str)"
+        str(spec) == "TestInterface: Interface\n- a: int\n- b: str\n- method(self, x: int, y: str)"
     )
 
 

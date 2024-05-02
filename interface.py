@@ -11,7 +11,7 @@ class Specification:
     variables: Dict[str, Type[Any]]
     methods: Dict[str, inspect.Signature]
 
-    def __repr__(self) -> str:
+    def __str__(self) -> str:
         heading = f"{self.name}: Interface"
         variables_body = "\n".join(
             f"- {name}: {annotation.__name__}" for name, annotation in self.variables.items()
@@ -72,5 +72,5 @@ class InterfaceMeta(type):
         cls.__specification = specification
         return cls
 
-    def __repr__(cls) -> str:
-        return repr(cls.__specification)
+    def __str__(cls) -> str:
+        return str(cls.__specification)
