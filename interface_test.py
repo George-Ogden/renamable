@@ -106,3 +106,32 @@ def test_access_to_implementations():
 
     assert TestInterface.TestImplementation1.x == 1
     assert TestInterface.TestImplementation2.x == 2
+
+
+def test_implementation_usage():
+    class TestInterface(metaclass=InterfaceMeta):
+        x: int
+
+        def inc(self): ...
+
+    class TestImplementation(TestInterface):
+        x = 0
+
+        def inc(self):
+            self.x += 1
+
+    class TestUsage(TestImplementation): ...
+
+    test_usage = TestUsage()
+    assert test_usage.x == 0
+    assert test_usage.TestInterface.x == 0
+
+    test_usage.inc()
+
+    assert test_usage.x == 1
+    assert test_usage.TestInterface.x == 1
+
+    test_usage.TestInterface.inc()
+
+    assert test_usage.x == 2
+    assert test_usage.TestInterface.x == 2
