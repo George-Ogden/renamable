@@ -1,32 +1,25 @@
 from __future__ import annotations
 
+import enum
 import inspect
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Self, Tuple, Type
 
 
-@dataclass(repr=False)
+class InterfaceLevel(enum.Enum):
+    INTERFACE = enum.auto()
+    IMPLEMENTATION = enum.auto()
+    USAGE = enum.auto()
+
+
+@dataclass
 class Specification:
     name: str
     variables: Dict[str, Type[Any]]
     methods: Dict[str, inspect.Signature]
 
-    def __str__(self) -> str:
-        heading = f"{self.name}: Interface"
-        variables_body = "\n".join(
-            f"- {name}: {annotation.__name__}" for name, annotation in self.variables.items()
-        )
-        if variables_body != "":
-            variables_body = "\n" + variables_body
-        methods_body = "\n".join(
-            f"- {name}{(signature)}" for name, signature in self.methods.items()
-        )
-        if methods_body != "":
-            methods_body = "\n" + methods_body
-        return f"{heading}{variables_body}{methods_body}"
-
     @classmethod
-    def from_cls(scls, cls: Type[Any]) -> Specification:
+    def from_cls(scls, cls: Type[Any], strict=True) -> Specification:
         declarations = {
             name: declaration
             for name, declaration in inspect.get_annotations(cls).items()
@@ -39,13 +32,22 @@ class Specification:
         if len(declarations) + len(definitions) == 0:
             raise TypeError(f"`{cls.__name__}` defines an empty interface.")
 
-        for name in definitions:
+        for name in list(definitions.keys()):
             if name in declarations:
-                raise TypeError(f"`{name}` has been assigned a value or is declare twice.")
+                if strict:
+                    raise TypeError(f"`{name}` has been assigned a value or is declare twice.")
+                else:
+                    definitions.pop(name)
+                    continue
             if not callable(definitions[name]):
-                raise ValueError(
-                    f"`{name}` detected in {cls.__name__} definition is not a function."
-                )
+                if strict:
+                    raise ValueError(
+                        f"`{name}` detected in {cls.__name__} definition is not a function."
+                    )
+                else:
+                    if name not in declarations:
+                        declarations[name] = type(name)
+                    definitions.pop(name)
 
         return Specification(
             name=cls.__name__,
@@ -55,11 +57,23 @@ class Specification:
             },
         )
 
+    def __ior__(self, other: Specification) -> Specification:
+        if not isinstance(other, Specification):
+            return NotImplemented
+        assert len(set(self.variables).intersection(set(other.methods))) == 0
+        assert len(set(self.methods).intersection(set(other.variables))) == 0
+        for name, signature in other.methods.items():
+            self.methods[name] = signature
+        for name, type_hint in other.variables.items():
+            self.variables[name] = type_hint
+        return self
+
 
 class InterfaceMeta(type):
     __specification: Specification
     __registry: Dict[str, Type[Self]]
     __interface: Optional[InterfaceMeta] = None
+    __level: InterfaceLevel
 
     def __new__(
         mcls: Type[type],
@@ -69,39 +83,46 @@ class InterfaceMeta(type):
         /,
         **kwargs: Any,
     ) -> InterfaceMeta:
-        cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace, **kwargs)
+        cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace)
         if cls.__interface == None:
-            specification = Specification.from_cls(cls)
+            # This creates a new interface.
+            specification = Specification.from_cls(cls, strict=True)
             cls.__specification = specification
             cls.__registry = {}
             cls.__interface = cls
+            cls.__level = InterfaceLevel.INTERFACE
         else:
-            cls.__interface.register(cls)
+            match cls.__level:
+                # Decrease the level and register only implementations.
+                case InterfaceLevel.INTERFACE:
+                    additional_specification = Specification.from_cls(cls, strict=False)
+                    cls.__specification |= additional_specification
+                    cls.__interface._register(cls)
+                    cls.__level = InterfaceLevel.IMPLEMENTATION
+                case InterfaceLevel.IMPLEMENTATION | InterfaceLevel.USAGE:
+                    cls.__level = InterfaceLevel.USAGE
+            mcls._add_property(cls)
         return cls
 
-    def __str__(cls) -> str:
-        return str(cls.__specification)
-
-    def register(self, cls: Self):
+    def _register(self, cls: Self):
         self.__registry[cls.__name__] = cls
-        self._add_property(cls)
 
-    def _add_property(self, cls: InterfaceMeta):
+    def _add_property(cls: InterfaceMeta):
         """Add a property that acts as an alias via the interface."""
 
         @property
         def interface_property(root):
             public_properties: Dict[str, property] = {}
             for name in cls.__specification.variables:
-                public_properties[name] = self._make_property(root, name, settable=True)
+                public_properties[name] = InterfaceMeta._make_property(root, name, settable=True)
 
             for name in cls.__specification.methods:
-                public_properties[name] = self._make_property(root, name, settable=False)
+                public_properties[name] = InterfaceMeta._make_property(root, name, settable=False)
             return type(cls.__interface.__name__, (), public_properties)()
 
         setattr(cls, cls.__interface.__name__, interface_property)
 
-    def _make_property(self, root, name: str, settable: bool = True) -> property:
+    def _make_property(root, name: str, settable: bool = True) -> property:
         """Make a property to get attributes from the root."""
 
         def getter(self) -> Any:
