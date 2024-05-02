@@ -92,3 +92,17 @@ def test_registration():
     implementations = TestInterface.list_implementations()
     assert len(implementations) == 2
     assert set(implementations) == set((TestImplementation1, TestImplementation2))
+
+
+def test_access_to_implementations():
+    class TestInterface(metaclass=InterfaceMeta):
+        x: int
+
+    class TestImplementation1(TestInterface):
+        x = 1
+
+    class TestImplementation2(TestInterface):
+        x: int = 2
+
+    assert TestInterface.TestImplementation1.x == 1
+    assert TestInterface.TestImplementation2.x == 2
