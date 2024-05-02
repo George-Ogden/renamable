@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Dict, Self, Tuple, Type
+from typing import Any, Dict, Tuple, Type
 
 
 @dataclass(repr=False)
@@ -60,14 +60,14 @@ class InterfaceMeta(type):
     __specification: Specification
 
     def __new__(
-        mcls: Type[Self],
+        mcls: Type[type],
         name: str,
         bases: Tuple[Type[Any], ...],
         namespace: Dict[str, Any],
         /,
         **kwargs: Dict[str, Any],
-    ) -> Self:
-        cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+    ) -> InterfaceMeta:
+        cls: InterfaceMeta = super().__new__(mcls, name, bases, namespace, **kwargs)
         specification = Specification.from_cls(cls)
         cls.__specification = specification
         return cls
