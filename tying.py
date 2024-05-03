@@ -11,6 +11,7 @@ class Renamable:
     def __new__(mcls, cls: Type[Renamable]) -> Type[Renamable]:
         cls = mcls._rename_attributes(cls)
         cls = mcls._add_property(cls)
+        cls = mcls._add_class_getitem(cls)
         return cls
 
     @classmethod
@@ -46,14 +47,32 @@ class Renamable:
         """Make a property to get attributes from the root."""
 
         def getter(self: object) -> Any:
-            derived_self._lookup_variable(name)
-            return getattr(derived_self, name)
+            return getattr(derived_self, derived_self._lookup_variable(name))
 
         def setter(self: object, value: Any):
-            derived_self._lookup_variable(name)
-            return setattr(derived_self, name, value)
+            return setattr(derived_self, derived_self._lookup_variable(name), value)
 
         if settable:
             return property(getter, setter)
         else:
             return property(getter)
+
+    @classmethod
+    def _add_class_getitem(mcls, cls: Type[Renamable]) -> Type[Renamable]:
+        def class_getitem(
+            cls: Type[Renamable], alternative_names: Dict[str, Any]
+        ) -> Type[Renamable]:
+            # Copy class.
+            cls = type(cls.__name__, cls.__bases__, dict(cls.__dict__))
+            for k, v in alternative_names.items():
+                if k not in cls.__attribute_names:
+                    raise ValueError(
+                        f"`{k}` not found in {cls.__name__} but trying to rename to `{v}`"
+                    )
+                cls.__attribute_names[k] = v
+                setattr(cls, v, getattr(cls, k))
+                delattr(cls, k)
+            return cls
+
+        cls.__class_getitem__ = class_getitem.__get__(cls)
+        return cls
