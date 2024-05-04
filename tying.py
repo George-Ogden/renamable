@@ -72,6 +72,10 @@ class Renamable:
         cls._alternative_names = dict(cls._alternative_names)
         cls._renamable_attributes = set(cls._renamable_attributes)
 
+        bases = tuple(
+            type(base.__name__, base.__bases__, dict(base.__dict__)) for base in cls.__bases__
+        )
+
         for old_name, new_name in alternative_names.items():
             if old_name not in cls._renamable_attributes:
                 raise ValueError(
@@ -82,26 +86,16 @@ class Renamable:
             cls._renamable_attributes.remove(old_name)
             setattr(cls, new_name, getattr(cls, old_name))
 
-            # Delete the current method (avoid confusion).
-            while hasattr(cls, old_name):
-                responsible_base = None
-                for base in cls.__bases__:
-                    if hasattr(base, old_name):
-                        responsible_base = base
-                        updated_base = type(base.__name__, base.__bases__, dict(base.__dict__))
-                        delattr(updated_base, old_name)
-                        break
-                else:
-                    delattr(cls, old_name)
-                    continue
-                assert responsible_base is not None
-                cls = type(
-                    cls.__name__,
-                    tuple(
-                        updated_base if base == responsible_base else base for base in cls.__bases__
-                    ),
-                    dict(cls.__dict__),
-                )
+            if hasattr(cls, old_name):
+                delattr(cls, old_name)
+
+            # Delete the current method from all bases.
+            for base in bases:
+                if hasattr(base, old_name):
+                    delattr(base, old_name)
+
+        cls = type(cls.__name__, bases, dict(cls.__dict__))
+
         return cls
 
     def _lookup_variable(self, name: str) -> str:
