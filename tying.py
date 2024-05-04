@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import ast
 import inspect
 import itertools
+from dataclasses import dataclass
 from typing import Any, ClassVar, Dict, Set, Type
+
+
+class Attribute: ...
+
+
+@dataclass
+class Variable(Attribute):
+    name: str
+
+
+@dataclass
+class Constant(Attribute):
+    value: Any
 
 
 class renamable:
@@ -47,10 +62,20 @@ class renamable:
         """Make a property to get attributes from the root."""
 
         def getter(self: object) -> Any:
-            return getattr(derived_self, derived_self._lookup_variable(name))
+            attribute = derived_self._lookup_attribute(name)
+            match attribute:
+                case Variable():
+                    return getattr(derived_self, attribute.name)
+                case Constant():
+                    return attribute.value
 
         def setter(self: object, value: Any):
-            return setattr(derived_self, derived_self._lookup_variable(name), value)
+            attribute = derived_self._lookup_attribute(name)
+            match attribute:
+                case Variable():
+                    return setattr(derived_self, attribute.name, value)
+                case Constant():
+                    raise AttributeError("Trying to set a constant value.")
 
         if settable:
             return property(getter, setter)
@@ -59,46 +84,80 @@ class renamable:
 
 
 class Renamable:
-    _alternative_names: ClassVar[Dict[str, str]] = dict()
+    _attributes_lookup: ClassVar[Dict[str, str]] = dict()
     _renamable_attributes: ClassVar[Set[str]] = set()
 
     def __class_getitem__(
-        cls: Type[Renamable], alternative_names: Dict[str, Any]
+        cls: Type[Renamable], attribute_renaming: Dict[str, Any]
     ) -> Type[Renamable]:
+        """Return a new class with the renaming."""
         # Add the renames to the class name.
-        name_suffix = f'[{",".join(f"{k}={v}" for k,v in alternative_names.items())}]'
+        name_suffix = f'[{",".join(f"{k}={v}" for k,v in attribute_renaming.items())}]'
         # Copy class.
         cls = type(cls.__name__ + name_suffix, cls.__bases__, dict(cls.__dict__))
-        cls._alternative_names = dict(cls._alternative_names)
+        cls._attributes_lookup = dict(cls._attributes_lookup)
         cls._renamable_attributes = set(cls._renamable_attributes)
 
         bases = tuple(
             type(base.__name__, base.__bases__, dict(base.__dict__)) for base in cls.__bases__
         )
 
-        for old_name, new_name in alternative_names.items():
+        for old_name, new_name in attribute_renaming.items():
             if old_name not in cls._renamable_attributes:
                 raise ValueError(
                     f"`{old_name}` not allowed to be renamed in {cls.__name__} but trying to rename to `{new_name}`"
                 )
-            # Update name and disallow renaming in the future.
-            cls._alternative_names[old_name] = new_name
-            cls._renamable_attributes.remove(old_name)
-            setattr(cls, new_name, getattr(cls, old_name))
 
-            if hasattr(cls, old_name):
-                delattr(cls, old_name)
+            attribute = cls._parse_attribute(new_name)
+            # Record that this has been updated.
+            cls._attributes_lookup[old_name] = attribute
+            # Disallow renaming in the future.
+            cls._renamable_attributes.remove(old_name)
+
+            match attribute:
+                case Variable():
+                    setattr(cls, new_name, getattr(cls, old_name))
+                    if hasattr(cls, old_name):
+                        # Delete old name to avoid confusion.
+                        delattr(cls, old_name)
+                case Constant():
+                    # Add a property with the same name for ease of use.
+                    if not hasattr(cls, old_name):
+
+                        def getter(self):
+                            return attribute.value
+
+                        setattr(cls, old_name, property(getter))
 
             # Delete the current method from all bases.
             for base in bases:
                 if hasattr(base, old_name):
                     delattr(base, old_name)
 
+        # Recreate the class with the updated bases.
         cls = type(cls.__name__, bases, dict(cls.__dict__))
 
         return cls
 
-    def _lookup_variable(self, name: str) -> str:
-        while name in self._alternative_names and self._alternative_names[name] != name:
-            name = self._alternative_names[name]
-        return name
+    def _lookup_attribute(self, name: str) -> Attribute:
+        """Return an attribute indicating either a constant or variable."""
+        attribute = Variable(name)
+        while isinstance(attribute, Variable) and attribute.name in self._attributes_lookup:
+            attribute = self._attributes_lookup[attribute.name]
+        return attribute
+
+    @classmethod
+    def _parse_attribute(cls, attribute: str) -> Attribute:
+        """Check whether an attribute is a value or a name."""
+        try:
+            expression = ast.parse(attribute, mode="eval")
+            match expression:
+                # Expression is a string containing a string (string constant).
+                case ast.Expression(body=ast.Constant()):
+                    return Constant(expression.body.value)
+        except (SyntaxError, TypeError, ValueError):
+            if not isinstance(attribute, str):
+                # Expression is not a string (constant).
+                return Constant(attribute)
+        # Expression is a string (variable name).
+        return Variable(attribute)
