@@ -131,3 +131,24 @@ def test_multiple_inheritance_overwrite_child():
         foo.Foo.bar_child()
 
     assert foo.Foo.bar() == "bar_grandchild"
+
+
+def test_replacement_name():
+    @renamable
+    class Foo:
+        def bar(self) -> str:
+            return "foo"
+
+    class FooChild(Foo[dict(bar="bar_child")]):
+        def bar(self) -> str:
+            return "foo_child"
+
+    foo = FooChild()
+    assert foo.bar_child() == "foo"
+
+    foo.bar() == "foo_child"
+
+    with pytest.raises(AttributeError):
+        foo.Foo.bar_child()
+
+    assert foo.Foo.bar() == "foo"
