@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from tying import renamable
@@ -152,3 +154,24 @@ def test_replacement_name():
         foo.Foo.bar_child()
 
     assert foo.Foo.bar() == "foo"
+
+
+@pytest.mark.parametrize("value", [8, None, 3.5, True])
+def test_value_rename(value: Any):
+    @renamable
+    class Foo:
+        x: Any
+
+    class FooChild(Foo[dict(x=value)]): ...
+
+    class OverwritingFooChild(Foo[dict(x=value)]):
+        x = 18
+
+    foo = FooChild()
+    assert foo.x == value
+    assert foo.Foo.x == value
+
+    foo = OverwritingFooChild()
+    assert foo.x == 18
+
+    assert foo.Foo.x == value
