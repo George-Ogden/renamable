@@ -33,7 +33,8 @@ class renamable:
                 (Renamable,) + bases,
                 dict(cls.__dict__),
             )
-        if Generic in cls.__bases__:
+        elif Generic in cls.__bases__:
+            # This is only necessary if Generic is in __bases__ and before the renamable (the class_getitem takes precedence).
             cls.__class_getitem__ = Renamable.__class_getitem__.__get__(cls)
         cls = mcls._rename_attributes(cls)
         cls = mcls._add_property(cls)
