@@ -4,7 +4,7 @@ import ast
 import inspect
 import itertools
 from dataclasses import dataclass
-from typing import Any, ClassVar, Dict, Set, Type
+from typing import Any, ClassVar, Dict, Generic, Set, Type, _generic_class_getitem
 
 
 class Attribute: ...
@@ -24,15 +24,17 @@ class renamable:
     """Decorator to make a class renamable."""
 
     def __new__(mcls, cls: Type[Renamable]) -> Type[Renamable]:
-        if not Renamable in cls.mro():
+        if not hasattr(cls, "_renamable"):
             bases = cls.__bases__
             if bases == (object,):
                 bases = ()
             cls = type(
                 cls.__name__,
-                bases + (Renamable,),
+                (Renamable,) + bases,
                 dict(cls.__dict__),
             )
+        if Generic in cls.__bases__:
+            cls.__class_getitem__ = Renamable.__class_getitem__.__get__(cls)
         cls = mcls._rename_attributes(cls)
         cls = mcls._add_property(cls)
         return cls
@@ -84,6 +86,9 @@ class renamable:
 
 
 class Renamable:
+    _renamable: bool = (
+        True  # We check for the presence of this attribute so setting it to false has no effect.
+    )
     _attributes_lookup: ClassVar[Dict[str, str]] = dict()
     _renamable_attributes: ClassVar[Set[str]] = set()
 
@@ -91,6 +96,15 @@ class Renamable:
         cls: Type[Renamable], attribute_renaming: Dict[str, Any]
     ) -> Type[Renamable]:
         """Return a new class with the renaming."""
+        if Generic in cls.__bases__:
+            cls_dict = dict(cls.__dict__)
+            # In this case, attribute renaming is the argument passed to the generic.
+            type_alias = _generic_class_getitem(cls, attribute_renaming)
+            bases = tuple(base for base in cls.__bases__ if base != Generic)
+            cls = type(type_alias.__name__ + f"[{attribute_renaming.__name__}]", bases, cls_dict)
+            cls.__class_getitem__ = Renamable.__class_getitem__.__get__(cls)
+            return cls
+
         # Add the renames to the class name.
         name_suffix = f'[{",".join(f"{k}={v}" for k,v in attribute_renaming.items())}]'
         # Copy class.
@@ -116,8 +130,9 @@ class Renamable:
 
             match attribute:
                 case Variable():
-                    setattr(cls, new_name, getattr(cls, old_name))
                     if hasattr(cls, old_name):
+                        # Copy if there is an attribute (not an annotation).
+                        setattr(cls, new_name, getattr(cls, old_name))
                         # Delete old name to avoid confusion.
                         delattr(cls, old_name)
                 case Constant():
