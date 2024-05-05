@@ -175,3 +175,24 @@ def test_value_rename(value: Any):
     assert foo.x == 18
 
     assert foo.Foo.x == value
+
+
+def test_renaming_generics():
+    @renamable
+    class Foo[T]:
+        x: T
+
+    class FooChild(Foo[int][dict(x="y")]):
+        y = 3
+
+    foo = FooChild()
+
+    assert foo.y == 3
+
+    with pytest.raises(AttributeError):
+        foo.Foo.y
+
+    with pytest.raises(AttributeError):
+        foo.x
+
+    assert foo.Foo.x == 3
