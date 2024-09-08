@@ -2,7 +2,7 @@ from typing import Any
 
 import pytest
 
-from tying import renamable
+from renamable import renamable
 
 
 def test_single_inheritance():
